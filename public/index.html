@@ -168,15 +168,12 @@ footer{margin-top:60px;color:var(--muted);font-size:.85rem;border-top:1px solid 
           <button class="ghost" type="button" id="dlSvg">Download wheel (SVG)</button>
           <button class="ghost" type="button" id="cpJson">Copy data (JSON)</button>
         </div>
-        <p class="hint" id="rServer" style="margin-top:10px"></p>
       </div>
       <div>
         <div class="sect"><h2>Positions</h2><div id="rPlanets"></div></div>
         <div class="sect"><h2>House cusps</h2><div id="rHouses"></div></div>
       </div>
     </div>
-
-    <div class="sect"><h2>How the midpoint was found</h2><div id="rWork" class="grid-wrap"></div></div>
 
     <div class="rgrid sect">
       <div><h2>Aspects</h2><div id="rAspects"></div></div>
@@ -187,18 +184,7 @@ footer{margin-top:60px;color:var(--muted);font-size:.85rem;border-top:1px solid 
     </div>
   </section>
 
-  <details>
-    <summary>How a Davison chart is calculated</summary>
-    <ol>
-      <li>Each birth time is converted to Universal Time using the time zone rules in force at that place and date, including historical daylight saving changes.</li>
-      <li>The two moments are averaged. That average is the Davison date and time.</li>
-      <li>The two birthplaces are averaged. Latitudes are averaged directly. Longitudes are averaged along the shorter arc, so a birthplace at 170°E and one at 170°W meet at 180°, not at 0°. The great-circle option finds the midpoint along the Earth's surface instead.</li>
-      <li>A normal birth chart is cast for that moment and place with Swiss Ephemeris. The result is a chart of the relationship as its own entity, and it holds real planet positions. This differs from a composite chart, which averages each planet separately.</li>
-    </ol>
-    <p>The midpoint place is often in the middle of nowhere. That is expected and does not affect the chart. Only its latitude and longitude are used, for the houses and angles.</p>
-  </details>
-
-  <footer>Planetary positions by the Swiss Ephemeris (Astrodienst AG). Coordinates and time zones from city search use Open-Meteo geocoding; you can always enter them by hand.</footer>
+  <p class="hint" style="margin-top:18px">The midpoint place is often in the middle of nowhere. That is expected and does not affect the chart. Only its latitude and longitude are used, for the houses and angles.</p>
 </div>
 
 <datalist id="tzlist"></datalist>
@@ -227,7 +213,7 @@ const BODY_COLOR = {
   uranus: '#7ff0e0', neptune: '#8aa8ff', pluto: '#c88bff', node: '#f0e6ff', snode: '#f0e6ff', chiron: '#b4e08a', lilith: '#d9a0ff', pof: '#ffe08a',
 };
 const PLANET_KEYS = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
-const ASPECT_BODIES = [...PLANET_KEYS, 'node', 'chiron'];
+const ASPECT_BODIES = [...PLANET_KEYS, 'node', 'chiron', 'lilith', 'pof'];
 const ASPECTS = [
   { n: 'Conjunction', a: 0, orb: 8, c: '#f0d27a', s: '☌', major: true },
   { n: 'Opposition', a: 180, orb: 8, c: '#ff7a90', s: '☍', major: true },
@@ -239,6 +225,14 @@ const ASPECTS = [
   { n: 'Semi-square', a: 45, orb: 2, c: '#e59aa9', s: '∠', major: false },
   { n: 'Sesqui-square', a: 135, orb: 2, c: '#e59aa9', s: 'Sq', major: false },
 ];
+
+function fmtDT(s) {
+  // server sends "yyyy-LL-dd HH:mm[:ss]"; render as dd/mm/yyyy HH:mm
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(s || '');
+  if (!m) return esc(s);
+  const [, y, mo, d, h, mi] = m;
+  return `${d}/${mo}/${y} ${h}:${mi}`;
+}
 
 function dms(lon) {
   lon = norm(lon);
@@ -622,15 +616,14 @@ function render(data, includeMinor) {
   const ch = data.chart, m = data.meta, dv = data.davison;
   const [A, B] = data.persons;
   $('rTitle').textContent = `${A.name} and ${B.name}`;
-  $('rServer').textContent = m.server ? `Calculated by server ${m.server.instance} on port ${m.server.port}.` : '';
 
   const notes = m.warnings.map((w) => `<div class="notice">${esc(w)}</div>`).join('');
   $('rNotices').innerHTML = notes;
 
   $('rMoment').innerHTML = `
-    <div><span>Davison moment (UT)</span><b>${esc(dv.utc.slice(0, 16))}</b></div>
+    <div><span>Davison moment (UT)</span><b>${fmtDT(dv.utc)}</b></div>
     <div><span>Midpoint place</span><b>${fmtLat(dv.lat)}, ${fmtLon(dv.lon)}</b></div>
-    <div><span>Local time there (${esc(dv.tz)}, UTC${esc(dv.offset)})</span><b>${esc(dv.local.slice(0, 16))}</b></div>
+    <div><span>Local time there (${esc(dv.tz)}, UTC${esc(dv.offset)})</span><b>${fmtDT(dv.local)}</b></div>
     <div><span>Zodiac</span><b>${esc(m.zodiac)}${m.ayanamsa != null ? ` <small style="font-size:.9rem;color:var(--muted)">(${m.ayanamsa.toFixed(3)}°)</small>` : ''}</b></div>
     <div><span>Houses</span><b>${esc(m.houseSystemUsed)}</b></div>
     <div><span>Ephemeris</span><b>${esc(m.ephemeris)}</b></div>`;
@@ -654,13 +647,6 @@ function render(data, includeMinor) {
   const half = (from) => `<table><thead><tr><th>House</th><th>Cusp</th></tr></thead><tbody>${[0, 1, 2, 3, 4, 5].map((k) => hrow(from + k)).join('')}</tbody></table>`;
   $('rHouses').innerHTML = `<div class="two">${half(0)}${half(6)}</div>`;
 
-  // how the midpoint was found
-  const pr = (P) => `<tr><td>${esc(P.name)}</td><td>${esc(P.local)} <small>(${esc(P.tz)}, UTC${esc(P.offset)})</small></td><td>${esc(P.utc.slice(0, 16))}</td><td>${fmtLat(P.lat)}, ${fmtLon(P.lon)}</td><td class="pos">Sun ${posText(P.sun)} ${SIGNS[Math.floor(norm(P.sun) / 30)].n}, Moon ${posText(P.moon)} ${SIGNS[Math.floor(norm(P.moon) / 30)].n}, Asc ${posText(P.asc)} ${SIGNS[Math.floor(norm(P.asc) / 30)].n}</td></tr>`;
-  $('rWork').innerHTML = `<table><thead><tr><th>Person</th><th>Birth (local)</th><th>Universal time</th><th>Place</th><th>Natal check</th></tr></thead><tbody>
-    ${pr(A)}${pr(B)}
-    <tr><td><b>Davison</b></td><td>${esc(dv.local.slice(0, 16))} <small>(${esc(dv.tz)}, UTC${esc(dv.offset)})</small></td><td><b>${esc(dv.utc.slice(0, 16))}</b></td><td><b>${fmtLat(dv.lat)}, ${fmtLon(dv.lon)}</b></td><td><small>${esc(m.midpointMethod)} midpoint of the places</small></td></tr>
-  </tbody></table>`;
-
   // aspect list
   const sorted = [...asp.out].sort((x, y) => x.orb - y.orb);
   const arow = (a) => {
@@ -670,8 +656,7 @@ function render(data, includeMinor) {
     return `<tr><td>${nm(a.A)}</td><td>${dot} ${a.asp.n}</td><td>${nm(a.B)}</td><td>${a.orb.toFixed(2)}°</td><td>${mv}</td></tr>`;
   };
   $('rAspects').innerHTML = sorted.length
-    ? `<table><thead><tr><th>Point</th><th>Aspect</th><th>Point</th><th>Orb</th><th></th></tr></thead><tbody>${sorted.map(arow).join('')}</tbody></table>
-       <p class="hint" style="margin-top:10px">Orbs: conjunction and opposition 8°, trine and square 7°, sextile 5°${includeMinor ? ', quincunx 3°, semi-sextile, semi-square and sesqui-square 2°' : ''}.</p>`
+    ? `<table><thead><tr><th>Point</th><th>Aspect</th><th>Point</th><th>Orb</th><th></th></tr></thead><tbody>${sorted.map(arow).join('')}</tbody></table>`
     : '<p class="hint">No aspects within the orbs.</p>';
 
   // aspect grid (lower triangle)
@@ -695,8 +680,7 @@ function render(data, includeMinor) {
   const count = (key, val) => planets.filter((b) => SIGNS[Math.floor(norm(b.lon) / 30)][key] === val).length;
   const bar = (label, n) => `<div class="bar"><span>${label}</span><div><i style="width:${(n / planets.length) * 100}%"></i></div><b>${n}</b></div>`;
   $('rBalance').innerHTML = `<div class="bars">${['Fire', 'Earth', 'Air', 'Water'].map((e) => bar(e, count('el', e))).join('')}</div>
-    <div class="bars" style="margin-top:16px">${['Cardinal', 'Fixed', 'Mutable'].map((e) => bar(e, count('mo', e))).join('')}</div>
-    <p class="hint" style="margin-top:10px">Counts the ten planets from Sun to Pluto.</p>`;
+    <div class="bars" style="margin-top:16px">${['Cardinal', 'Fixed', 'Mutable'].map((e) => bar(e, count('mo', e))).join('')}</div>`;
 }
 
 /* ============================== tools ============================== */
